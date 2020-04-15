@@ -70,7 +70,7 @@ run(train, test, features='fbank', batch_size=32, epochs=100, multi_gpu=True)
 ## Installation
 You can use pip:
 ```bash
-pip install deepspeechasr
+pip install deepasr
 ```
 
 ## Getting started
