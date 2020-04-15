@@ -1,7 +1,7 @@
 # DeepAsr
 DeepAsr is an open-source implementation of end-to-end Automatic Speech Recognition (ASR) engine. 
 
-DeepAsr will provide multiple Speech Recognition using Deep Neural Network architectures, Currenly it provides Baidu's Deep Speech 2 using Keras (Tensorflow).
+DeepAsr will provide multiple Speech Recognition architectures, Currenly it provides Baidu's Deep Speech 2 using Keras (Tensorflow).
 
 **Using DeepAsr you can**:
 - perform speech-to-text using pre-trained models
