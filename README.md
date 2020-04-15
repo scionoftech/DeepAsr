@@ -88,7 +88,7 @@ Loaded pre-trained model has all components. The prediction can be invoked just 
 ```python
 import pandas as pd
 import deepasr as asr
-pipeline = asr.pipeline.get_pipeline.load('./checkpoints')
+pipeline = asr.pipeline.load('./checkpoints')
 test_data = pd.read_csv('test_data.csv')
 print("Truth:", test_data['transcripts'].to_list()[0])
 print("Prediction", pipeline.predict(test_data['path'].to_list()[0]))
