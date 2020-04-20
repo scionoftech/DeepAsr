@@ -36,7 +36,7 @@ class CTCPipeline(Pipeline):
                  model: keras.Model,
                  optimizer: keras.optimizers.Optimizer,
                  decoder: Decoder,
-                 sample_rate: 16000,
+                 sample_rate: int,
                  mono: True,
                  multi_gpu: bool = True):
         self._alphabet = alphabet
@@ -46,7 +46,9 @@ class CTCPipeline(Pipeline):
         self._features_extractor = features_extractor
         self.sample_rate = sample_rate
         self.mono = mono
+        self.multi_gpu = multi_gpu
         self._model = self.distribute_model(model) if multi_gpu else model
+        self.temp_model = self._model
 
     @property
     def alphabet(self) -> Alphabet:
@@ -111,6 +113,7 @@ class CTCPipeline(Pipeline):
                  iter_num: int = 1000,
                  batch_size: int = 32,
                  epochs: int = 3,
+                 checkpoint: str = None,
                  **kwargs) -> keras.callbacks.History:
         """ Get ready data, compile and train a model. """
 
@@ -157,11 +160,49 @@ class CTCPipeline(Pipeline):
                                           batch_size=batch_size,
                                           epochs=epochs,
                                           verbose=1, **kwargs)
+                if checkpoint:
+                    self.save(checkpoint)
+                    print("Pipeline Saved at", checkpoint)
             else:
                 history = self._model.fit(train_inputs, outputs,
                                           batch_size=batch_size,
                                           epochs=epochs,
                                           verbose=0, **kwargs)
+
+        return history
+
+    def fit(self,
+            train_dataset: pd.DataFrame,
+            augmentation: Augmentation = None,
+            prepared_features: bool = False,
+            batch_size: int = 32,
+            epochs: int = 3,
+            checkpoint: str = None,
+            **kwargs) -> keras.callbacks.History:
+        """ Get ready data, compile and train a model. """
+
+        audios = train_dataset['path'].to_list()
+
+        labels = self._alphabet.get_batch_labels(train_dataset['transcripts'].to_list())
+
+        transcripts = train_dataset['transcripts'].to_list()
+
+        if not self._model.optimizer:  # a loss function and an optimizer
+            self.compile_model(labels.shape[1])  # have to be set before the training
+
+        train_inputs = self.wrap_preprocess(audios,
+                                            list(labels),
+                                            transcripts, augmentation, prepared_features)
+
+        outputs = {'ctc': np.zeros([batch_size])}
+
+        print("input features: ", train_inputs['the_input'].shape)
+        print("input labels: ", train_inputs['the_labels'].shape)
+
+        history = self._model.fit(train_inputs, outputs,
+                                  batch_size=batch_size,
+                                  epochs=epochs,
+                                  verbose=1, **kwargs)
 
         return history
 
@@ -223,14 +264,6 @@ class CTCPipeline(Pipeline):
 
         return generator()
 
-    def predict(self, audio: str, **kwargs) -> List[str]:
-        """ Get ready features, and make a prediction. """
-        in_features = self._features_extractor([read_audio(audio, sample_rate=self.sample_rate, mono=self.mono)])
-        batch_logits = self._model.predict(in_features, **kwargs)
-        decoded_labels = self._decoder(batch_logits)
-        predictions = self._alphabet.get_batch_transcripts(decoded_labels)
-        return predictions
-
     def wrap_preprocess(self, audios: List[str], the_labels: List[np.array], transcripts: List[str],
                         augmentation: Augmentation = None,
                         prepared_features: bool = False):
@@ -258,12 +291,24 @@ class CTCPipeline(Pipeline):
             'label_length': np.asarray(label_lengths)
         }
 
+    def predict(self, audio: str, **kwargs) -> List[str]:
+        """ Get ready features, and make a prediction. """
+        in_features = self._features_extractor([read_audio(audio, sample_rate=self.sample_rate, mono=self.mono)])
+        batch_logits = self._model.predict(in_features, **kwargs)
+        decoded_labels = self._decoder(batch_logits)
+        predictions = self._alphabet.get_batch_transcripts(decoded_labels)
+        return predictions
+
     def save(self, directory: str):
         """ Save each component of the CTC pipeline. """
         # self._model.save(os.path.join(directory, 'model.h5'))
+        self.temp_model.save(os.path.join(directory, 'network.h5'))
         self._model.save_weights(os.path.join(directory, 'model_weights.h5'))
+        save_data(self._optimizer, os.path.join(directory, 'optimizer.bin'))
         save_data(self._alphabet, os.path.join(directory, 'alphabet.bin'))
         save_data(self._decoder, os.path.join(directory, 'decoder.bin'))
+        save_data(self.multi_gpu, os.path.join(directory, 'multi_gpu_flag.bin'))
+        save_data(self.sample_rate, os.path.join(directory, 'sample_rate.bin'))
         save_data(self._features_extractor,
                   os.path.join(directory, 'feature_extractor.bin'))
 
