@@ -4,15 +4,15 @@ from tensorflow import keras
 from tensorflow.keras.models import Model
 from tensorflow.keras.layers import *
 from tensorflow.keras.mixed_precision import experimental as mixed_precision
-from tensorflow.keras.activations import relu
+# from tensorflow.keras.activations import relu
 
 
-def clipped_relu(x):
-    return relu(x, max_value=20)
+# def clipped_relu(x):
+#     return relu(x, max_value=20)
 
 
-def get_deepspeech2_v1(input_dim=None, output_dim=29,
-                       is_mixed_precision=True, random_state=1) -> keras.Model:
+def get_deepspeech2(input_dim=None, output_dim=29,
+                    is_mixed_precision=True, random_state=1) -> keras.Model:
     """
 
     input_dim: int i wielokrotność 4
@@ -33,11 +33,11 @@ def get_deepspeech2_v1(input_dim=None, output_dim=29,
     bn1 = BatchNormalization(axis=-1, name='BN_1')(input_data)
 
     # 1D Convs
-    conv1 = Conv1D(512, 5, strides=1, activation=clipped_relu, name='Conv1D_1')(bn1)
+    conv1 = Conv1D(512, 5, strides=1, activation='relu', name='Conv1D_1')(bn1)
     cbn1 = BatchNormalization(axis=-1, name='CBN_1')(conv1)
-    conv2 = Conv1D(512, 5, strides=1, activation=clipped_relu, name='Conv1D_2')(cbn1)
+    conv2 = Conv1D(512, 5, strides=1, activation='relu', name='Conv1D_2')(cbn1)
     cbn2 = BatchNormalization(axis=-1, name='CBN_2')(conv2)
-    conv3 = Conv1D(512, 5, strides=1, activation=clipped_relu, name='Conv1D_3')(cbn2)
+    conv3 = Conv1D(512, 5, strides=1, activation='relu', name='Conv1D_3')(cbn2)
 
     # Batch normalize
     x = BatchNormalization(axis=-1, name='BN_2')(conv3)
@@ -52,7 +52,7 @@ def get_deepspeech2_v1(input_dim=None, output_dim=29,
     # birnn7 = Bidirectional(SimpleRNN(1280, return_sequences=True, name='BiRNN_7'), merge_mode='sum')(birnn6)
 
     # BiRNNs
-    for i in [1, 2, 3, 4, 5, 6, 7]:
+    for i in [1, 2, 3, 4, 5]:
         recurrent = GRU(units=800,
                         activation='tanh',
                         recurrent_activation='sigmoid',
@@ -63,12 +63,12 @@ def get_deepspeech2_v1(input_dim=None, output_dim=29,
         x = Bidirectional(recurrent,
                           name=f'bidirectional_{i}',
                           merge_mode='concat')(x)
-        x = Dropout(rate=0.5)(x) if i < 7 else x  # Only between
+        x = Dropout(rate=0.5)(x) if i < 5 else x  # Only between
 
     # Batch normalize
     bn3 = BatchNormalization(axis=-1, name='BN_3')(x)
 
-    dense = TimeDistributed(Dense(1024, activation=clipped_relu, name='FC1'))(bn3)
+    dense = TimeDistributed(Dense(1024, activation='relu', name='FC1'))(bn3)
     y_pred = TimeDistributed(Dense(output_dim, activation='softmax', name='y_pred'))(dense)
 
     model = Model(inputs=input_data, outputs=y_pred)

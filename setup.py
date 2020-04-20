@@ -5,10 +5,10 @@ with open('README.md') as f:
 
 setuptools.setup(
     name="deepasr",
-    version="0.0.1",
+    version="0.0.3",
     author="Sai Kumar Yava",
     author_email="saikumar.geek@gmail.com",
-    description="A Keras(Tensorflow) implementations of Automatic Speech Recognition",
+    description="Keras(Tensorflow) implementations of Automatic Speech Recognition",
     long_description=long_description,
     long_description_content_type='text/markdown',
     url="https://github.com/scionoftech/DeepAsr",

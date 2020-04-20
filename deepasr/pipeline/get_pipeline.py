@@ -6,7 +6,7 @@ import deepasr as asr
 
 def load(directory: str):
     """ Load each component of the CTC pipeline. """
-    _model = asr.model.deepspeech2_v1.get_deepspeech2(
+    _model = asr.model.deepspeech2.get_deepspeech2(
         input_dim=161,
         output_dim=29,
         rnn_units=800,
@@ -37,7 +37,7 @@ import deepasr as asr
 
 def load(directory: str):
     """ Load each component of the CTC pipeline. """
-    _model = asr.model.deepspeech2_v1.get_deepspeech2(
+    _model = asr.model.deepspeech2.get_deepspeech2(
         input_dim=161,
         output_dim=29,
         rnn_units=800,

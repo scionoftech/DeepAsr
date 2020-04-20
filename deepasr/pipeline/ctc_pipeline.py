@@ -85,10 +85,11 @@ class CTCPipeline(Pipeline):
 
     def compile_model(self, label_dim):
         """ The compiled model means the model configured for training. """
-        # your ground truth data. The data you are going to compare with the model's outputs in training
+
         input_data = self._model.inputs[0]
         y_pred = self._model.outputs[0]
 
+        # your ground truth data. The data you are going to compare with the model's outputs in training
         labels = Input(name='the_labels', shape=[label_dim], dtype='float32')
         # the length (in steps, or chars this case) of each sample (sentence) in the y_pred tensor
         input_length = Input(name='input_length', shape=[1], dtype='float32')
@@ -96,7 +97,7 @@ class CTCPipeline(Pipeline):
         label_length = Input(name='label_length', shape=[1], dtype='float32')
         output = Lambda(self.ctc_loss, output_shape=(1,), name='ctc')([y_pred, labels, input_length, label_length])
         self._model = Model(inputs=[input_data, labels, input_length, label_length], outputs=output,
-                            name="deepspeech2")
+                            name="DeepAsr")
         self._model.compile(loss={'ctc': lambda y_true, y_pred: y_pred}, optimizer=self._optimizer,
                             metrics=['accuracy'])
 
@@ -149,7 +150,9 @@ class CTCPipeline(Pipeline):
             # print(train_inputs['label_length'])
 
             if i % 100 == 0:
-                print(i)
+                print("iter:", i)
+                print("input features: ", train_inputs['the_input'].shape)
+                print("input labels: ", train_inputs['the_labels'].shape)
                 history = self._model.fit(train_inputs, outputs,
                                           batch_size=batch_size,
                                           epochs=epochs,

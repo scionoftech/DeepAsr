@@ -8,4 +8,4 @@ from . import utils
 from . import vocab
 
 # Version of the deepasr package
-__version__ = "0.0.1"
+__version__ = "0.0.3"
