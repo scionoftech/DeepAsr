@@ -161,7 +161,7 @@ class CTCPipeline(Pipeline):
                                           epochs=epochs,
                                           verbose=1, **kwargs)
                 if checkpoint:
-                    self.save(checkpoint)
+                    self.save_checkpoint(checkpoint, labels.shape[1])
                     print("Pipeline Saved at", checkpoint)
             else:
                 history = self._model.fit(train_inputs, outputs,
@@ -299,11 +299,37 @@ class CTCPipeline(Pipeline):
         predictions = self._alphabet.get_batch_transcripts(decoded_labels)
         return predictions
 
-    def save(self, directory: str):
+    def save_checkpoint(self, directory: str, output_dim):
         """ Save each component of the CTC pipeline. """
-        # self._model.save(os.path.join(directory, 'model.h5'))
+        if not self.temp_model.optimizer:  # a loss function and an optimizer
+            input_data = self.temp_model.inputs[0]
+            y_pred = self.temp_model.outputs[0]
+
+            # your ground truth data. The data you are going to compare with the model's outputs in training
+            labels = Input(name='the_labels', shape=[output_dim], dtype='float32')
+            # the length (in steps, or chars this case) of each sample (sentence) in the y_pred tensor
+            input_length = Input(name='input_length', shape=[1], dtype='float32')
+            #  the length (in steps, or chars this case) of each sample (sentence) in the y_true
+            label_length = Input(name='label_length', shape=[1], dtype='float32')
+            output = Lambda(self.ctc_loss, output_shape=(1,), name='ctc')([y_pred, labels, input_length, label_length])
+            self.temp_model = Model(inputs=[input_data, labels, input_length, label_length], outputs=output,
+                                    name="DeepAsr")
+            self.temp_model.compile(loss={'ctc': lambda y_true, y_pred: y_pred}, optimizer=self._optimizer,
+                                    metrics=['accuracy'])
+
         self.temp_model.save(os.path.join(directory, 'network.h5'))
         self._model.save_weights(os.path.join(directory, 'model_weights.h5'))
+        save_data(self._optimizer, os.path.join(directory, 'optimizer.bin'))
+        save_data(self._alphabet, os.path.join(directory, 'alphabet.bin'))
+        save_data(self._decoder, os.path.join(directory, 'decoder.bin'))
+        save_data(self.multi_gpu, os.path.join(directory, 'multi_gpu_flag.bin'))
+        save_data(self.sample_rate, os.path.join(directory, 'sample_rate.bin'))
+        save_data(self._features_extractor,
+                  os.path.join(directory, 'feature_extractor.bin'))
+
+    def save(self, directory: str):
+        """ Save each component of the CTC pipeline. """
+        self._model.save(os.path.join(directory, 'model.h5'))
         save_data(self._optimizer, os.path.join(directory, 'optimizer.bin'))
         save_data(self._alphabet, os.path.join(directory, 'alphabet.bin'))
         save_data(self._decoder, os.path.join(directory, 'decoder.bin'))
