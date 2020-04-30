@@ -1,14 +1,18 @@
 import abc
-from typing import List
+from typing import List, Tuple
 import numpy as np
 
 
 class FeaturesExtractor:
 
+    def __index__(self):
+        self.features_shape = None
+
     def __call__(self, batch_audio: List[np.ndarray]) -> np.ndarray:
         """ Extract features from the file list. """
         features = [self.make_features(audio) for audio in batch_audio]
-        X = self.align(features)
+        self.features_shape = max(features, key=len).shape
+        X = self.align(features, self.features_shape)
         return X.astype(np.float16)
 
     @abc.abstractmethod
@@ -29,14 +33,13 @@ class FeaturesExtractor:
         return audio * gain
 
     @staticmethod
-    def align(arrays: list, default=0) -> np.ndarray:
+    def align(arrays: list, features_shape: Tuple, default=0) -> np.ndarray:
         """ Pad arrays (default along time dimensions). Return the single
         array (batch_size, time, features). """
-        max_array = max(arrays, key=len)
-        X = np.full(shape=[len(arrays), *max_array.shape],
+        # max_array = max(arrays, key=len)
+        X = np.full(shape=[len(arrays), *features_shape],
                     fill_value=default, dtype=float)
         for index, array in enumerate(arrays):
             time_dim, features_dim = array.shape
             X[index, :time_dim] = array
         return X
-

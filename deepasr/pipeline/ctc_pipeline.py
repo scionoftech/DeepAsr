@@ -7,9 +7,8 @@ import tensorflow as tf
 from tensorflow import keras
 import pandas as pd
 from concurrent.futures import ThreadPoolExecutor, wait
-import tensorflow.keras.backend as K
+# from tensorflow.keras.layers import *
 from tensorflow.keras.models import Model
-from tensorflow.keras.layers import *
 import sys
 
 sys.path.append("..")
@@ -19,6 +18,7 @@ from deepasr.decoder import Decoder
 from deepasr.features import FeaturesExtractor
 from deepasr.vocab import Alphabet
 from deepasr.utils import read_audio, save_data
+from deepasr.model import compile_model
 
 logger = logging.getLogger('asr.pipeline')
 
@@ -38,17 +38,19 @@ class CTCPipeline(Pipeline):
                  decoder: Decoder,
                  sample_rate: int,
                  mono: True,
-                 multi_gpu: bool = True):
+                 label_len: int = 0,
+                 multi_gpu: bool = True,
+                 temp_model: keras.Model = None):
         self._alphabet = alphabet
-        self._model_cpu = model
         self._optimizer = optimizer
         self._decoder = decoder
         self._features_extractor = features_extractor
         self.sample_rate = sample_rate
         self.mono = mono
+        self.label_len = label_len
         self.multi_gpu = multi_gpu
         self._model = self.distribute_model(model) if multi_gpu else model
-        self.temp_model = self._model
+        self.temp_model = temp_model if temp_model else self._model
 
     @property
     def alphabet(self) -> Alphabet:
@@ -60,7 +62,7 @@ class CTCPipeline(Pipeline):
 
     @property
     def model(self) -> keras.Model:
-        return self._model_cpu
+        return self.temp_model
 
     @property
     def decoder(self) -> Decoder:
@@ -79,32 +81,6 @@ class CTCPipeline(Pipeline):
         features = augmentation(features) if augmentation else features
         # labels = self._alphabet.get_batch_labels(transcripts)
         return features
-
-    def ctc_loss(self, args):
-        """ The CTC loss using TensorFlow's `ctc_loss`. """
-        y_pred, labels, input_length, label_length = args
-        return K.ctc_batch_cost(labels, y_pred, input_length, label_length)
-
-    def compile_model(self, label_dim):
-        """ The compiled model means the model configured for training. """
-
-        input_data = self._model.inputs[0]
-        y_pred = self._model.outputs[0]
-
-        # your ground truth data. The data you are going to compare with the model's outputs in training
-        labels = Input(name='the_labels', shape=[label_dim], dtype='float32')
-        # the length (in steps, or chars this case) of each sample (sentence) in the y_pred tensor
-        input_length = Input(name='input_length', shape=[1], dtype='float32')
-        #  the length (in steps, or chars this case) of each sample (sentence) in the y_true
-        label_length = Input(name='label_length', shape=[1], dtype='float32')
-        output = Lambda(self.ctc_loss, output_shape=(1,), name='ctc')([y_pred, labels, input_length, label_length])
-        self._model = Model(inputs=[input_data, labels, input_length, label_length], outputs=output,
-                            name="DeepAsr")
-        self._model.compile(loss={'ctc': lambda y_true, y_pred: y_pred}, optimizer=self._optimizer,
-                            metrics=['accuracy'])
-
-        self._model.summary()
-        logger.info("Model is successfully compiled")
 
     def fit_iter(self,
                  train_dataset: pd.DataFrame,
@@ -127,8 +103,11 @@ class CTCPipeline(Pipeline):
 
         train_len_ = len(transcripts)
 
+        self.label_len = labels.shape[1]
+
         if not self._model.optimizer:  # a loss function and an optimizer
-            self.compile_model(labels.shape[1])  # have to be set before the training
+            self._model = compile_model(self._model, self._optimizer)  # have to be set before the training
+        self._model.summary()
 
         for i in range(iter_num):
             train_index = random.sample(range(train_len_ - 25), batch_size)
@@ -161,7 +140,7 @@ class CTCPipeline(Pipeline):
                                           epochs=epochs,
                                           verbose=1, **kwargs)
                 if checkpoint:
-                    self.save_checkpoint(checkpoint, labels.shape[1])
+                    self.save(checkpoint)
                     print("Pipeline Saved at", checkpoint)
             else:
                 history = self._model.fit(train_inputs, outputs,
@@ -187,17 +166,25 @@ class CTCPipeline(Pipeline):
 
         transcripts = train_dataset['transcripts'].to_list()
 
-        if not self._model.optimizer:  # a loss function and an optimizer
-            self.compile_model(labels.shape[1])  # have to be set before the training
+        self.label_len = labels.shape[1]
 
+        if not self._model.optimizer:  # a loss function and an optimizer
+            self._model = compile_model(self._model, self._optimizer)  # have to be set before the training
+        self._model.summary()
+
+        print("Feature Extraction in progress...")
         train_inputs = self.wrap_preprocess(audios,
                                             list(labels),
                                             transcripts, augmentation, prepared_features)
 
-        outputs = {'ctc': np.zeros([batch_size])}
+        outputs = {'ctc': np.zeros([len(audios)])}
+
+        print("Feature Extraction completed.")
 
         print("input features: ", train_inputs['the_input'].shape)
         print("input labels: ", train_inputs['the_labels'].shape)
+
+        print("Model training initiated...")
 
         history = self._model.fit(train_inputs, outputs,
                                   batch_size=batch_size,
@@ -225,8 +212,11 @@ class CTCPipeline(Pipeline):
 
         train_len_ = len(transcripts)
 
+        self.label_len = labels.shape[1]
+
         if not self._model.optimizer:  # a loss function and an optimizer
-            self.compile_model(labels.shape[1])  # have to be set before the training
+            self._model = compile_model(self._model, self._optimizer)  # have to be set before the training
+        self._model.summary()
 
         train_gen = self.get_generator(audios, labels, transcripts,
                                        batch_size, shuffle, augmentation, prepared_features)
@@ -293,30 +283,20 @@ class CTCPipeline(Pipeline):
 
     def predict(self, audio: str, **kwargs) -> List[str]:
         """ Get ready features, and make a prediction. """
-        in_features = self._features_extractor([read_audio(audio, sample_rate=self.sample_rate, mono=self.mono)])
-        batch_logits = self._model.predict(in_features, **kwargs)
-        decoded_labels = self._decoder(batch_logits)
+        # get audio features
+        features = self.features_extractor.make_features(
+            read_audio(audio, sample_rate=self.sample_rate, mono=self.mono))
+        in_features = self.features_extractor.align([features], self.features_extractor.features_shape)
+
+        pred_model = Model(inputs=self._model.get_layer('the_input').output,
+                           outputs=self._model.get_layer('the_output').output)
+        batch_logits = pred_model.predict(in_features, **kwargs)
+        decoded_labels = self._decoder(batch_logits, self.label_len)
         predictions = self._alphabet.get_batch_transcripts(decoded_labels)
         return predictions
 
-    def save_checkpoint(self, directory: str, output_dim):
+    def save(self, directory: str):
         """ Save each component of the CTC pipeline. """
-        if not self.temp_model.optimizer:  # a loss function and an optimizer
-            input_data = self.temp_model.inputs[0]
-            y_pred = self.temp_model.outputs[0]
-
-            # your ground truth data. The data you are going to compare with the model's outputs in training
-            labels = Input(name='the_labels', shape=[output_dim], dtype='float32')
-            # the length (in steps, or chars this case) of each sample (sentence) in the y_pred tensor
-            input_length = Input(name='input_length', shape=[1], dtype='float32')
-            #  the length (in steps, or chars this case) of each sample (sentence) in the y_true
-            label_length = Input(name='label_length', shape=[1], dtype='float32')
-            output = Lambda(self.ctc_loss, output_shape=(1,), name='ctc')([y_pred, labels, input_length, label_length])
-            self.temp_model = Model(inputs=[input_data, labels, input_length, label_length], outputs=output,
-                                    name="DeepAsr")
-            self.temp_model.compile(loss={'ctc': lambda y_true, y_pred: y_pred}, optimizer=self._optimizer,
-                                    metrics=['accuracy'])
-
         self.temp_model.save(os.path.join(directory, 'network.h5'))
         self._model.save_weights(os.path.join(directory, 'model_weights.h5'))
         save_data(self._optimizer, os.path.join(directory, 'optimizer.bin'))
@@ -324,17 +304,8 @@ class CTCPipeline(Pipeline):
         save_data(self._decoder, os.path.join(directory, 'decoder.bin'))
         save_data(self.multi_gpu, os.path.join(directory, 'multi_gpu_flag.bin'))
         save_data(self.sample_rate, os.path.join(directory, 'sample_rate.bin'))
-        save_data(self._features_extractor,
-                  os.path.join(directory, 'feature_extractor.bin'))
-
-    def save(self, directory: str):
-        """ Save each component of the CTC pipeline. """
-        self._model.save(os.path.join(directory, 'model.h5'))
-        save_data(self._optimizer, os.path.join(directory, 'optimizer.bin'))
-        save_data(self._alphabet, os.path.join(directory, 'alphabet.bin'))
-        save_data(self._decoder, os.path.join(directory, 'decoder.bin'))
-        save_data(self.multi_gpu, os.path.join(directory, 'multi_gpu_flag.bin'))
-        save_data(self.sample_rate, os.path.join(directory, 'sample_rate.bin'))
+        save_data(self.mono, os.path.join(directory, 'mono.bin'))
+        save_data(self.label_len, os.path.join(directory, 'label_len.bin'))
         save_data(self._features_extractor,
                   os.path.join(directory, 'feature_extractor.bin'))
 

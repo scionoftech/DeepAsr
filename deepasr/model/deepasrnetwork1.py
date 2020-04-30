@@ -28,9 +28,9 @@ def get_deepasrnetwork1(input_dim=None, output_dim=29,
     bn1 = BatchNormalization(axis=-1, name='BN_1')(input_data)
 
     # 1D Convs
-    conv = Conv1D(filters=220, kernel_size=5, strides=2, padding='valid', activation='relu', name='Conv1D_1')(bn1)
+    conv = Conv1D(filters=220, kernel_size=5, strides=1, padding='valid', activation='relu', name='Conv1D_1')(bn1)
     conv = BatchNormalization(name="CNBN_1")(conv)
-    conv1 = Conv1D(filters=220, kernel_size=5, strides=2, padding='valid', activation='relu', name='Conv1D_2')(conv)
+    conv1 = Conv1D(filters=220, kernel_size=5, strides=1, padding='valid', activation='relu', name='Conv1D_2')(conv)
     conv1 = BatchNormalization(name="CNBN_2")(conv1)
 
     # RNN
@@ -43,7 +43,7 @@ def get_deepasrnetwork1(input_dim=None, output_dim=29,
     bn2 = BatchNormalization(axis=-1, name="BN_2")(merged)
 
     dense = TimeDistributed(Dense(30))(bn2)
-    y_pred = TimeDistributed(Activation('softmax', name='softmax'))(dense)
+    y_pred = TimeDistributed(Dense(output_dim, activation='softmax', name='y_pred'), name='the_output')(dense)
 
     model = Model(inputs=input_data, outputs=y_pred)
 

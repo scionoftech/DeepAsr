@@ -14,7 +14,8 @@ def preprocess(feature_type: str = 'fbank', features_num: int = 161,
         features_extractor = FilterBanks(features_num=features_num, samplerate=samplerate, winlen=winlen,
                                          winstep=winstep, winfunc=winfunc,
                                          is_standardization=is_standardization)
-    else:
+        return features_extractor
+    elif feature_type == 'spectrogram':
         features_extractor = Spectrogram(
             features_num=features_num,
             samplerate=samplerate,
@@ -23,5 +24,4 @@ def preprocess(feature_type: str = 'fbank', features_num: int = 161,
             winfunc=winfunc,
             pad_audio_to=pad_audio_to
         )
-
-    return features_extractor
+        return features_extractor

@@ -69,7 +69,7 @@ def get_deepspeech2(input_dim=None, output_dim=29,
     bn3 = BatchNormalization(axis=-1, name='BN_3')(x)
 
     dense = TimeDistributed(Dense(1024, activation='relu', name='FC1'))(bn3)
-    y_pred = TimeDistributed(Dense(output_dim, activation='softmax', name='y_pred'))(dense)
+    y_pred = TimeDistributed(Dense(output_dim, activation='softmax', name='y_pred'), name='the_output')(dense)
 
     model = Model(inputs=input_data, outputs=y_pred)
 
