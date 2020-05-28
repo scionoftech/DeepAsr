@@ -1,15 +1,30 @@
-from tensorflow.keras.layers import *
+from tensorflow.python.ops import math_ops as tf_math_ops
+from tensorflow.python.ops import ctc_ops as ctc
 from tensorflow.keras.models import Model
+from tensorflow.keras.layers import *
 import tensorflow.keras.backend as K
+import tensorflow as tf
 import logging
 
 logger = logging.getLogger('asr.pipeline')
+
+def ctc_batch_cost_custom(y_true, y_pred, input_length, label_length, preprocess_collapse_repeated=False):
+    label_length = tf.cast(tf.squeeze(label_length, axis=-1), tf.int32)
+    input_length = tf.cast(tf.squeeze(input_length, axis=-1), tf.int32)
+    sparse_labels = tf.cast(
+        K.ctc_label_dense_to_sparse(y_true, label_length), tf.int32)
+    y_pred = tf_math_ops.log(tf.transpose(y_pred, perm=[1, 0, 2]) + K.epsilon())
+    return tf.expand_dims(ctc.ctc_loss(inputs=y_pred,
+                                       labels=sparse_labels,
+                                       sequence_length=input_length,
+                                       preprocess_collapse_repeated=True),   1)
+
 
 
 def ctc_loss(args):
     """ The CTC loss using TensorFlow's `ctc_loss`. """
     y_pred, labels, input_length, label_length = args
-    return K.ctc_batch_cost(labels, y_pred, input_length, label_length)
+    return ctc_batch_cost_custom(labels, y_pred, input_length, label_length, True)
 
 
 def compile_model(_model, _optimizer, label_len=None):
