@@ -49,7 +49,7 @@ class CTCPipeline(Pipeline):
         self.mono = mono
         self.label_len = label_len
         self.multi_gpu = multi_gpu
-        self._model = _compile_model(model, optimizer, multi_gpu)
+        self._model = self._compile_model(model, optimizer, multi_gpu)
         self.temp_model = temp_model if temp_model else self._model
 
     @property
@@ -314,7 +314,9 @@ class CTCPipeline(Pipeline):
     #         os.path.join(directory, 'feature_extractor.bin'))
 
     @staticmethod
-    def _compile_model(model: keras.Model, optimizer: keras.optimizers.Optimizer, multi_gpu: bool) -> keras.Model:
+    def _compile_model(model: keras.Model, 
+                       optimizer: keras.optimizers.Optimizer, 
+                       multi_gpu: bool) -> keras.Model:
         """ Replicates a model on different GPUs. """
         if not multi_gpu:
             dist_model = compile_model(model, optimizer)
