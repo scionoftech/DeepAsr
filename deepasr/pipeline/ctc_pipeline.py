@@ -49,7 +49,7 @@ class CTCPipeline(Pipeline):
         self.mono = mono
         self.label_len = label_len
         self.multi_gpu = multi_gpu
-        self._model = self.distribute_model(model, optimizer) if multi_gpu else model
+        self._model = _compile_model(model, optimizer, multi_gpu)
         self.temp_model = temp_model if temp_model else self._model
 
     @property
@@ -314,15 +314,18 @@ class CTCPipeline(Pipeline):
     #         os.path.join(directory, 'feature_extractor.bin'))
 
     @staticmethod
-    def distribute_model(model: keras.Model, optimizer: keras.optimizers.Optimizer) -> keras.Model:
+    def _compile_model(model: keras.Model, optimizer: keras.optimizers.Optimizer, multi_gpu: bool) -> keras.Model:
         """ Replicates a model on different GPUs. """
-        try:
-            strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
-            with strategy.scope():
-                dist_model = compile_model(model, optimizer)
-            print("Training using multiple GPUs")
-            logger.info("Training using multiple GPUs")
-        except ValueError:
-            dist_model = model
+        if not multi_gpu:
+            dist_model = compile_model(model, optimizer)
             logger.info("Training using single GPU or CPU")
+        else: 
+            try:
+                strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
+                with strategy.scope():
+                    dist_model = compile_model(model, optimizer)
+                logger.info("Training using multiple GPUs")
+            except ValueError:
+                dist_model = compile_model(model, optimizer)
+                logger.info("Training using single GPU or CPU")
         return dist_model
