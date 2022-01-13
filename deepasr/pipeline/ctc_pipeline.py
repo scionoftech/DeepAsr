@@ -49,7 +49,7 @@ class CTCPipeline(Pipeline):
         self.mono = mono
         self.label_len = label_len
         self.multi_gpu = multi_gpu
-        self._model = self.distribute_model(model) if multi_gpu else model
+        self._model = self.distribute_model(model, optimizer) if multi_gpu else model
         self.temp_model = temp_model if temp_model else self._model
 
     @property
