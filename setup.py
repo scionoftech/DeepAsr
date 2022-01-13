@@ -5,7 +5,7 @@ with open('README.md') as f:
 
 setuptools.setup(
     name="deepasr",
-    version="0.1.1",
+    version="0.1.2",
     author="Sai Kumar Yava",
     author_email="saikumar.geek@gmail.com",
     description="Keras(Tensorflow) implementations of Automatic Speech Recognition",
