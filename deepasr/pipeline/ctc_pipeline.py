@@ -91,7 +91,7 @@ class CTCPipeline(Pipeline):
                  epochs: int = 3,
                  checkpoint: str = None,
                  **kwargs) -> keras.callbacks.History:
-        """ Get ready data, compile and train a model. """
+        """ Get ready data and train a model. """
 
         history = keras.callbacks.History()
 
@@ -105,8 +105,6 @@ class CTCPipeline(Pipeline):
 
         self.label_len = labels.shape[1]
 
-        if not self._model.optimizer:  # a loss function and an optimizer
-            self._model = compile_model(self._model, self._optimizer)  # have to be set before the training
         self._model.summary()
 
         for i in range(iter_num):
@@ -158,7 +156,7 @@ class CTCPipeline(Pipeline):
             epochs: int = 3,
             checkpoint: str = None,
             **kwargs) -> keras.callbacks.History:
-        """ Get ready data, compile and train a model. """
+        """ Get ready data and train a model. """
 
         audios = train_dataset['path'].to_list()
 
@@ -168,8 +166,6 @@ class CTCPipeline(Pipeline):
 
         self.label_len = labels.shape[1]
 
-        if not self._model.optimizer:  # a loss function and an optimizer
-            self._model = compile_model(self._model, self._optimizer)  # have to be set before the training
         self._model.summary()
 
         print("Feature Extraction in progress...")
@@ -202,7 +198,7 @@ class CTCPipeline(Pipeline):
                       verbose: int = 1,
                       **kwargs) -> keras.callbacks.History:
 
-        """ Get ready data, compile and train a model. """
+        """ Get ready data and train a model. """
 
         audios = train_dataset['path'].to_list()
 
@@ -214,8 +210,6 @@ class CTCPipeline(Pipeline):
 
         self.label_len = labels.shape[1]
 
-        if not self._model.optimizer:  # a loss function and an optimizer
-            self._model = compile_model(self._model, self._optimizer)  # have to be set before the training
         self._model.summary()
 
         train_gen = self.get_generator(audios, labels, transcripts,
@@ -320,12 +314,12 @@ class CTCPipeline(Pipeline):
     #         os.path.join(directory, 'feature_extractor.bin'))
 
     @staticmethod
-    def distribute_model(model: keras.Model) -> keras.Model:
+    def distribute_model(model: keras.Model, optimizer: keras.optimizers.Optimizer) -> keras.Model:
         """ Replicates a model on different GPUs. """
         try:
             strategy = tf.distribute.experimental.MultiWorkerMirroredStrategy()
             with strategy.scope():
-                dist_model = model
+                dist_model = compile_model(model, optimizer)
             print("Training using multiple GPUs")
             logger.info("Training using multiple GPUs")
         except ValueError:
